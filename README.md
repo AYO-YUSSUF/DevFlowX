@@ -55,10 +55,43 @@ The TypeScript interfaces in `frontend/src/contracts.ts` mirror the API schemas 
 
 ## Team ownership handoff
 
-- UI/dashboard: `frontend/src/App.tsx` and `frontend/src/styles.css`
-- Gemini helper: add an isolated service/provider and its API route; keep mock mode available.
-- Neo4j: implement the graph repository behind the existing `/api/graph` response contract.
-- Azure/CI: add deployment configuration and document required secrets; preserve local run instructions.
+Each person owns one reviewable slice. Build against the shared API and data contracts above, keep the local demo working, and include a short handoff note with changed files, run steps, decisions, and known gaps.
+
+### Savage — UI and experiment dashboard
+
+- **Build:** polish the experiment list/detail and create form, run status, and a simple hyperparameter visualization. Use mock data if an API field is not ready; coordinate contract changes before depending on them.
+- **Deliver:** UI changes, screenshots or a short walkthrough, and the API fields/endpoints the UI needs.
+- **Done when:** a user can create and inspect an experiment in the local demo, with validation plus empty, loading, and error states.
+- **Start in:** `frontend/src/App.tsx` and `frontend/src/styles.css`.
+- **Keep in scope:** prioritize the form, dashboard, and chart; leave drag-and-drop pipeline editing for later.
+
+### TAh — Gemini-assisted ML helper
+
+- **Build:** one focused suggestion feature, such as generating a starter training/evaluation snippet or explaining an ML error. Put Gemini behind a provider interface and retain a deterministic mock mode so the demo works without an API key.
+- **Deliver:** provider/service, prompt template, at least two example scenarios, error and missing-key behavior, and setup notes.
+- **Done when:** the frontend/API can request a useful suggestion for two ML scenarios, and the UI labels generated content as a suggestion that needs review.
+- **Keep in scope:** never put the Gemini key in frontend code; do not build a general autonomous coding agent.
+
+### Tobenna — Neo4j experiment and version graph
+
+- **Build:** Neo4j schema and queries for experiments, runs, model versions, and parent/change relationships. Provide seed data and connect it behind the existing `GET /api/graph` response contract.
+- **Deliver:** schema note, seed script, graph repository/queries, and local setup or mock fallback.
+- **Done when:** the dashboard can trace a run to its experiment and show at least two related model versions.
+- **Keep in scope:** make version history transparent; defer automatic concurrent merge/conflict resolution.
+
+### Pauline — Azure deployment and CI
+
+- **Build:** a reproducible deployment path appropriate to the available class account, plus CI configuration if time and repo access allow. Preserve local development as a working path.
+- **Deliver:** deployment files or a step-by-step walkthrough, environment-variable/secrets list, assumptions about Azure access and cost, and CI configuration if feasible.
+- **Done when:** another teammate can reproduce the local run and follow the documented Azure path; secrets are not committed.
+- **Keep in scope:** do not create paid cloud resources without the team's budget/access plan; clearly mark any Azure ML or AKS part that is documented or mocked rather than deployed.
+
+### Shared integration expectations
+
+- Agree on changes to `frontend/src/contracts.ts` and `backend/app/schemas.py` before relying on new fields.
+- Keep the app runnable without Gemini, Neo4j, or Azure credentials; use mock/local providers as needed.
+- At each check-in, report what is working, what is next, blockers, and any contract change needed.
+- If a task is blocked or unfinished, hand over its current files and notes so another teammate can continue without restarting.
 
 ## Current limitations
 
