@@ -1,14 +1,27 @@
 import json
+import logging
 from contextlib import asynccontextmanager
+from typing import Any
 
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 
 from . import store
+from .graph import create_graph_repository
+from .graph.mock_repository import MockGraphRepository
 from .schemas import (
-    Experiment, ExperimentCreate, GraphEdge, GraphNode, ModelVersion, Run,
-    RunCreate, WorkflowGraph,
+    Experiment,
+    ExperimentCreate,
+    GraphEdge,
+    GraphNode,
+    ModelVersion,
+    Run,
+    RunCreate,
+    WorkflowGraph,
 )
+
+logger = logging.getLogger(__name__)
+graph_repository: Any | None = None
 
 
 def model_from_row(row) -> ModelVersion:
@@ -45,8 +58,18 @@ def experiment_from_db(db, row) -> Experiment:
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
+    global graph_repository
     store.initialize()
-    yield
+    graph_repository = create_graph_repository(store)
+    try:
+        yield
+    finally:
+        if graph_repository is not None:
+            try:
+                graph_repository.close()
+            except Exception:
+                logger.exception("Error while closing the graph repository")
+            graph_repository = None
 
 
 app = FastAPI(title="DevFlowX API", version="0.1.0", lifespan=lifespan)
@@ -129,16 +152,19 @@ def create_run(experiment_id: str, payload: RunCreate):
 
 @app.get("/api/graph", response_model=WorkflowGraph)
 def get_graph():
-    nodes, edges = [], []
-    with store.connect() as db:
-        for exp in db.execute("SELECT * FROM experiments"):
-            nodes.append(GraphNode(id=exp["id"], kind="experiment", label=exp["name"], detail=exp["task"]))
-            for run in db.execute("SELECT * FROM runs WHERE experiment_id=?", (exp["id"],)):
-                nodes.append(GraphNode(id=run["id"], kind="run", label=f"Run {run['id'][-4:]}", detail=run["status"]))
-                edges.append(GraphEdge(source=exp["id"], target=run["id"], relation="HAS_RUN"))
-            for model in db.execute("SELECT * FROM models WHERE experiment_id=?", (exp["id"],)):
-                nodes.append(GraphNode(id=model["id"], kind="model", label=f"{model['name']} v{model['version']}", detail=f"F1 {store.decode(model['metrics_json']).get('f1', '—')}"))
-                edges.append(GraphEdge(source=model["run_id"], target=model["id"], relation="PRODUCED"))
-                if model["parent_model_id"]:
-                    edges.append(GraphEdge(source=model["parent_model_id"], target=model["id"], relation="PARENT_OF"))
-    return WorkflowGraph(nodes=nodes, edges=edges)
+    """Return the same WorkflowGraph contract from Neo4j or SQLite fallback."""
+    global graph_repository
+    if graph_repository is None:
+        graph_repository = MockGraphRepository(store)
+
+    try:
+        # SQLite remains the source of truth. Reconcile before reading so runs
+        # created by this API appear in Neo4j even if a prior sync was skipped.
+        graph_repository.sync_from_store(store)
+        return graph_repository.get_graph()
+    except Exception:
+        logger.exception(
+            "Graph provider failed while serving /api/graph; returning the "
+            "SQLite graph projection instead."
+        )
+        return MockGraphRepository(store).get_graph()
