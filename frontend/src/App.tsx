@@ -75,6 +75,25 @@ function App() {
     : 0;
 
   const nodes = useMemo(() => graph.nodes.slice(0, 9), [graph]);
+
+  // Count the rows needed by each node type so no graph nodes share a position.
+  const graphRowCount = useMemo(() => {
+    const counts: Record<'experiment' | 'run' | 'model', number> = {
+      experiment: 0,
+      run: 0,
+      model: 0,
+    };
+
+    nodes.forEach((node) => {
+      counts[node.kind] += 1;
+    });
+
+    return Math.max(1, ...Object.values(counts));
+  }, [nodes]);
+
+  // The canvas grows vertically when a node type has more than two records.
+  const graphHeight = Math.max(178, 70 + graphRowCount * 64);
+
   const graphPositions = useMemo(() => {
     const columns = { experiment: 0.12, run: 0.44, model: 0.76 } as const;
     const rowIndex: Record<string, number> = {};
@@ -86,7 +105,7 @@ function App() {
 
         return [node.id, {
           x: columns[node.kind] * 1000,
-          y: 36 + (row % 2) * 76,
+          y: 36 + row * 64,
         }] as const;
       }),
     );
@@ -158,7 +177,7 @@ function App() {
               {experiments.reduce((count, experiment) => count + experiment.model_versions.length, 0)}
             </span>
           </a>
-          <a className="nav-item"><GitBranch size={17} /> Version graph</a>
+          <a className="nav-item" href="#workflow-graph"><GitBranch size={17} /> Version graph</a>
         </nav>
 
         <div className="sidebar-section">
@@ -445,7 +464,7 @@ function App() {
             <div className="assistant-orbit orbit-two" />
           </section>
 
-          <section className="graph-strip">
+          <section className="graph-strip" id="workflow-graph" style={{ scrollMarginTop: 24 }}>
             <div className="graph-strip-head">
               <div>
                 <div className="graph-eyebrow"><GitBranch size={14} /> WORKFLOW GRAPH</div>
@@ -455,7 +474,7 @@ function App() {
               <span className="local-badge"><i /> WORKFLOW GRAPH</span>
             </div>
 
-            <div className="graph-canvas">
+            <div className="graph-canvas" style={{ height: `${graphHeight}px` }}>
               <div className="graph-grid-bg" />
               {nodes.map((node) => {
                 const position = graphPositions.get(node.id);
@@ -479,7 +498,7 @@ function App() {
               })}
               <svg
                 className="graph-lines"
-                viewBox="0 0 1000 150"
+                viewBox={`0 0 1000 ${graphHeight}`}
                 preserveAspectRatio="none"
                 aria-hidden="true"
               >
