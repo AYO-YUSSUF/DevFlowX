@@ -4,3 +4,12 @@
 
 @media(max-width:1150px){.sidebar{width:220px}.main-area{margin-left:220px}.content{padding:25px 22px}.dashboard-grid{grid-template-columns:minmax(0,1.45fr) minmax(270px,1fr)}.stat-card{padding-left:10px;padding-right:10px}.stat-foot{font-size:8px}}
 .run-key{background:#83c2e1}
+
+.connection.disconnected {
+  color: #f09180;
+}
+
+.connection.disconnected i {
+  background: #f09180;
+  box-shadow: 0 0 7px #f0918044;
+}
