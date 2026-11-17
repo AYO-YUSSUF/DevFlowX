@@ -13,3 +13,84 @@
   background: #f09180;
   box-shadow: 0 0 7px #f0918044;
 }
+
+/* ===== Demo polish: readable sizes, subtle motion, matching graph colors ===== */
+.content{animation:fadeUp .45s ease both}
+@keyframes fadeUp{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+
+/* Larger text so it reads on a projector */
+.page-heading p,.section-heading p,.panel-heading p,.graph-strip-head p{font-size:13px}
+.page-heading h1{font-size:32px}
+.stat-head{font-size:11px}
+.stat-value{font-size:30px}
+.stat-foot{font-size:11px}
+.stat-card{min-height:118px}
+.panel-heading{height:auto;min-height:66px}
+.panel-heading h3{font-size:15px}
+.panel-heading p{font-size:12px}
+th{font-size:10px;height:34px}
+td{font-size:12px;height:48px}
+.run-id{font-size:12px}
+.pill{font-size:10px;padding:4px 8px;border-radius:999px;display:inline-flex;align-items:center;gap:5px}
+.pill::before{content:'';width:5px;height:5px;border-radius:50%;background:currentColor}
+.pill.running::before{animation:pulse 1.4s ease-in-out infinite}
+@keyframes pulse{50%{opacity:.25}}
+.metric-cell{font-size:12px}
+.param-chip,.date-cell{font-size:11px}
+.panel-footer{font-size:10px;height:38px}
+.lineage-top>b{font-size:12px}
+.version-tag,.lineage-metrics{font-size:10px}
+.latest-tag{font-size:9px}
+.nav-item,.experiment-link{font-size:12px}
+.nav-label,.section-title,.eyebrow,.breadcrumbs,.connection{font-size:10px}
+.button{font-size:12px;height:36px}
+.assistant-copy>b{font-size:14px}
+.assistant-copy p,.assistant-label,.assistant-button{font-size:11px}
+.graph-node b{font-size:11px}
+.graph-node small{font-size:9px}
+.graph-footer{font-size:11px}
+.graph-strip-head p{font-size:12px}
+.page-footer{font-size:9px}
+
+/* F1 bar */
+.metric-cell{white-space:nowrap}
+.f1-bar{display:inline-block;width:44px;height:4px;margin-left:8px;border-radius:2px;background:#26302a;vertical-align:middle;overflow:hidden}
+.f1-bar i{display:block;height:100%;background:#a2ea68;border-radius:2px;transition:width .6s ease}
+
+/* Hover feedback */
+.stat-card,.lineage-card,.graph-node{transition:transform .2s ease,border-color .2s ease,box-shadow .2s ease}
+.stat-card:hover{transform:translateY(-2px);border-color:#3d4a40;box-shadow:0 8px 22px #0004}
+.lineage-card:hover{border-color:#4a5d4b}
+tbody tr{transition:background .15s ease}
+tbody tr:hover{background:#1b231e}
+.pill.failed{box-shadow:0 0 0 1px #5a3a34 inset}
+
+/* Run nodes now match the blue "Run" legend dot */
+.node-run{border-color:#3d5663;background:#1a2530}
+.node-run .graph-node-icon{background:#24394a;color:#83c2e1}
+
+@media(prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+
+
+/* ===== Fix: stat card footers wrap inside the card ===== */
+.stat-foot{flex-direction:column;align-items:flex-start;gap:3px}
+.stat-foot>span{white-space:normal}
+@media(max-width:1100px){.stat-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:1300px){.dashboard-grid{grid-template-columns:minmax(0,1fr)}}
+
+/* Table fits its panel */
+th,td{padding-left:8px;padding-right:8px}
+.param-chip{display:inline-block;max-width:170px;overflow:hidden;text-overflow:ellipsis;vertical-align:middle}
+.f1-bar{width:34px}
+
+/* ===== Sidebar items are real buttons now ===== */
+button.nav-item,button.workspace-switch,button.user-card{font-family:inherit;text-align:left;cursor:pointer}
+button.nav-item{width:100%;background:none;border:0}
+button.nav-item:hover{background:#1b231d;color:#dbe6d4}
+button.nav-item.active:hover{background:#202922}
+button.workspace-switch{width:100%;color:inherit}
+button.workspace-switch:hover{border-color:#3a473d;background:#1b221d}
+button.user-card{width:100%;background:none;color:inherit;border:0;border-top:1px solid #29312c;border-radius:0}
+button.user-card:hover b{color:#fff}
+.sidebar button:focus-visible,.top-help:focus-visible,.quiet-button:focus-visible{outline:2px solid #a2ea68;outline-offset:2px}
+.info-line{margin:0;color:#b4bdb5;font-size:13px;line-height:1.6}

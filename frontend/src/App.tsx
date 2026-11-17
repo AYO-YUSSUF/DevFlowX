@@ -25,6 +25,51 @@ const fmtDate = (value: string) =>
     day: 'numeric',
   });
 
+const STATUS_LABEL: Record<string, string> = {
+  succeeded: 'Passed',
+  running: 'Running',
+  failed: 'Failed',
+  queued: 'Queued',
+};
+
+const prettyKey = (key: string) => key.replace(/_/g, ' ');
+
+// Each click of "Log demo run" adds the next run in this story:
+// a baseline, a failure, then steady improvement. The Model lineage
+// panel and the graph fill in as the runs are added.
+const DEMO_RUNS = [
+  { status: 'succeeded' as const, parameters: { learning_rate: 0.01, epochs: 10 }, metrics: { accuracy: 0.78, f1: 0.71 }, notes: 'Baseline model with default settings.' },
+  { status: 'failed' as const, parameters: { learning_rate: 0.5, epochs: 10 }, metrics: {}, notes: 'Learning rate too high. Training diverged.' },
+  { status: 'succeeded' as const, parameters: { learning_rate: 0.005, epochs: 20 }, metrics: { accuracy: 0.83, f1: 0.77 }, notes: 'Lower learning rate and more epochs.' },
+  { status: 'succeeded' as const, parameters: { learning_rate: 0.001, epochs: 30 }, metrics: { accuracy: 0.88, f1: 0.84 }, notes: 'Best result so far.' },
+];
+
+type InfoKind = 'help' | 'settings' | 'workspace' | 'account';
+
+const INFO: Record<InfoKind, { title: string; body: string[] }> = {
+  help: {
+    title: 'How DevFlowX works',
+    body: [
+      '1. Create an experiment: the question you want a model to answer.',
+      '2. Log runs: every training attempt, with its settings and scores.',
+      '3. Compare runs using F1 (balance of precision and recall) and accuracy. Closer to 1.00 is better.',
+      '4. Follow the lineage: every passing run saves a numbered model version, so you can see how the model improved.',
+    ],
+  },
+  settings: {
+    title: 'Settings',
+    body: ['Workspace settings are coming in a future build. This prototype uses default preferences.'],
+  },
+  workspace: {
+    title: 'Workspaces',
+    body: ['Switching between workspaces is coming soon. You are in the personal workspace.'],
+  },
+  account: {
+    title: 'Account',
+    body: ['Account management and team roles are coming soon.'],
+  },
+};
+
 function App() {
   const [experiments, setExperiments] = useState<Experiment[]>([]);
   const [graph, setGraph] = useState<WorkflowGraph>({ nodes: [], edges: [] });
@@ -33,6 +78,9 @@ function App() {
   const [showCreate, setShowCreate] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  const [activeNav, setActiveNav] = useState<'overview' | 'models' | 'graph'>('overview');
+  const [infoPanel, setInfoPanel] = useState<InfoKind | null>(null);
+  const [showAllRuns, setShowAllRuns] = useState(false);
 
   const refresh = useCallback(async () => {
     try {
@@ -68,13 +116,34 @@ function App() {
       .toLowerCase()
       .includes(search.toLowerCase()),
   );
-  const runs = selected?.runs ?? [];
+  const runs = useMemo(
+    () =>
+      [...(selected?.runs ?? [])].sort(
+        (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime(),
+      ),
+    [selected],
+  );
   const newest = runs[0];
   const meanF1 = runs.length
     ? runs.reduce((sum, run) => sum + (run.metrics.f1 ?? 0), 0) / runs.length
     : 0;
 
-  const nodes = useMemo(() => graph.nodes.slice(0, 9), [graph]);
+  const nodes = useMemo(() => {
+    if (!selected) return graph.nodes.slice(0, 9);
+    const ids = new Set([
+      selected.id,
+      ...selected.runs.map((run) => run.id),
+      ...selected.model_versions.map((model) => model.id),
+    ]);
+    const scoped = graph.nodes.filter((node) => ids.has(node.id));
+    const pool = scoped.length ? scoped : graph.nodes;
+    const ofKind = (kind: string) => pool.filter((node) => node.kind === kind);
+    return [
+      ...ofKind('experiment').slice(0, 1),
+      ...ofKind('run').slice(-4),
+      ...ofKind('model').slice(-4),
+    ];
+  }, [graph, selected]);
 
   // Count the rows needed by each node type so no graph nodes share a position.
   const graphRowCount = useMemo(() => {
@@ -111,6 +180,17 @@ function App() {
     );
   }, [nodes]);
 
+  function goTo(target: 'overview' | 'models' | 'graph') {
+    setActiveNav(target);
+    if (target === 'overview') {
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+      return;
+    }
+    document
+      .getElementById(target === 'models' ? 'model-lineage' : 'workflow-graph')
+      ?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+
   async function createExperiment(payload: ExperimentCreate) {
     setBusy(true);
     try {
@@ -130,12 +210,10 @@ function App() {
 
     setBusy(true);
     try {
+      const preset = DEMO_RUNS[selected.runs.length % DEMO_RUNS.length];
       await api.createRun(selected.id, {
-        status: 'succeeded',
-        parameters: { learning_rate: 0.001, epochs: 20 },
-        metrics: { accuracy: 0.86, f1: 0.79 },
-        model_name: 'churn-classifier',
-        notes: 'Demo run. Replace these example metrics with actual training output.',
+        ...preset,
+        model_name: preset.status === 'succeeded' ? 'churn-classifier' : undefined,
       });
       await refresh();
     } catch (err) {
@@ -156,28 +234,30 @@ function App() {
           </div>
         </div>
 
-        <div className="workspace-switch">
+        <button className="workspace-switch" onClick={() => setInfoPanel('workspace')}>
           <div className="workspace-avatar">N</div>
           <div>
             <b>Northstar Labs</b>
             <small>Personal workspace</small>
           </div>
           <ChevronDown size={15} />
-        </div>
+        </button>
 
         <div className="nav-label">WORKSPACE</div>
         <nav>
-          <a className="nav-item active">
+          <button className={`nav-item ${activeNav === 'overview' ? 'active' : ''}`} onClick={() => goTo('overview')}>
             <LayoutDashboard size={17} /> Overview
             <span className="nav-count">{experiments.length}</span>
-          </a>
-          <a className="nav-item">
+          </button>
+          <button className={`nav-item ${activeNav === 'models' ? 'active' : ''}`} onClick={() => goTo('models')}>
             <Boxes size={17} /> Models
             <span className="nav-count">
               {experiments.reduce((count, experiment) => count + experiment.model_versions.length, 0)}
             </span>
-          </a>
-          <a className="nav-item" href="#workflow-graph"><GitBranch size={17} /> Version graph</a>
+          </button>
+          <button className={`nav-item ${activeNav === 'graph' ? 'active' : ''}`} onClick={() => goTo('graph')}>
+            <GitBranch size={17} /> Version graph
+          </button>
         </nav>
 
         <div className="sidebar-section">
@@ -218,16 +298,16 @@ function App() {
         </div>
 
         <div className="sidebar-bottom">
-          <a className="nav-item"><Settings2 size={17} /> Settings</a>
-          <a className="nav-item"><CircleHelp size={17} /> Help &amp; docs</a>
-          <div className="user-card">
+          <button className="nav-item" onClick={() => setInfoPanel('settings')}><Settings2 size={17} /> Settings</button>
+          <button className="nav-item" onClick={() => setInfoPanel('help')}><CircleHelp size={17} /> Help &amp; docs</button>
+          <button className="user-card" onClick={() => setInfoPanel('account')}>
             <div className="user-avatar">JD</div>
             <div>
               <b>Jordan Davis</b>
               <small>ML Engineer</small>
             </div>
             <ChevronDown size={15} />
-          </div>
+          </button>
         </div>
       </aside>
 
@@ -249,7 +329,7 @@ function App() {
             <button className="avatar-stack" title="Team workspace">
               <span>JD</span><span>AK</span><span>+3</span>
             </button>
-            <button className="top-help" aria-label="Help">
+            <button className="top-help" aria-label="Help" onClick={() => setInfoPanel('help')}>
               <CircleHelp size={17} />
             </button>
           </div>
@@ -276,7 +356,7 @@ function App() {
             </div>
             <div className="heading-actions">
               <button className="button secondary" onClick={addDemoRun} disabled={!selected || busy}>
-                <Plus size={16} /> Log run
+                <Plus size={16} /> Log demo run
               </button>
               <button className="button primary" onClick={() => setShowCreate(true)} disabled={busy}>
                 <Plus size={16} /> New experiment
@@ -285,7 +365,7 @@ function App() {
           </div>
 
           <section className="stat-grid">
-            <article className="stat-card">
+            <article className="stat-card" title="Each experiment is one question you are trying to answer with a model">
               <div className="stat-head">
                 <span>EXPERIMENTS</span>
                 <span className="stat-icon"><Boxes size={16} /></span>
@@ -297,7 +377,7 @@ function App() {
               </div>
             </article>
 
-            <article className="stat-card">
+            <article className="stat-card" title="Every successful run saves a new, numbered version of the model">
               <div className="stat-head">
                 <span>MODEL VERSIONS</span>
                 <span className="stat-icon violet"><GitBranch size={16} /></span>
@@ -311,7 +391,7 @@ function App() {
               </div>
             </article>
 
-            <article className="stat-card">
+            <article className="stat-card" title="F1 balances precision and recall. Closer to 1.00 is better.">
               <div className="stat-head">
                 <span>AVG. F1 SCORE</span>
                 <span className="stat-icon amber"><Sparkles size={16} /></span>
@@ -324,11 +404,11 @@ function App() {
                 <span className="positive">
                   <ArrowUpRight size={14} /> Latest: {newest?.metrics.f1?.toFixed(2) ?? '—'}
                 </span>
-                <span>Recorded runs only</span>
+                <span>Higher is better</span>
               </div>
             </article>
 
-            <article className="stat-card">
+            <article className="stat-card" title="When this experiment was last changed">
               <div className="stat-head">
                 <span>LAST ACTIVITY</span>
                 <span className="stat-icon blue"><Clock3 size={16} /></span>
@@ -358,28 +438,33 @@ function App() {
                   <h3>Recent runs</h3>
                   <p>Training history and evaluation metrics</p>
                 </div>
-                <button className="quiet-button">All runs <ArrowUpRight size={13} /></button>
+                <button className="quiet-button" onClick={() => setShowAllRuns((v) => !v)}>{showAllRuns ? 'Show fewer' : 'All runs'} <ArrowUpRight size={13} /></button>
               </div>
 
               <div className="table-wrap">
                 <table>
                   <thead>
                     <tr>
-                      <th>RUN</th><th>STATUS</th><th>F1 SCORE</th><th>ACCURACY</th><th>PARAMETERS</th><th>DATE</th>
+                      <th>RUN</th><th>STATUS</th><th>F1 SCORE</th><th>ACCURACY</th><th>SETTINGS</th><th>DATE</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {runs.slice(0, 5).map((run) => (
+                    {runs.slice(0, showAllRuns ? runs.length : 5).map((run, index) => (
                       <tr key={run.id}>
-                        <td><span className="run-id"><i /> {run.id.slice(-8)}</span></td>
-                        <td><span className={`pill ${run.status}`}>{run.status}</span></td>
-                        <td className="metric-cell">{run.metrics.f1?.toFixed(2) ?? '—'}</td>
+                        <td><span className="run-id" title={`ID: ${run.id}`}><i /> Run #{runs.length - index}</span></td>
+                        <td><span className={`pill ${run.status}`}>{STATUS_LABEL[run.status] ?? run.status}</span></td>
+                        <td className="metric-cell">
+                          {run.metrics.f1?.toFixed(2) ?? '—'}
+                          {run.metrics.f1 !== undefined && (
+                            <span className="f1-bar"><i style={{ width: `${Math.round(run.metrics.f1 * 100)}%` }} /></span>
+                          )}
+                        </td>
                         <td>{run.metrics.accuracy?.toFixed(2) ?? '—'}</td>
                         <td>
                           <span className="param-chip">
                             {Object.entries(run.parameters)
                               .slice(0, 2)
-                              .map(([key, value]) => `${key}: ${value}`)
+                              .map(([key, value]) => `${prettyKey(key)} ${value}`)
                               .join(' · ') || '—'}
                           </span>
                         </td>
@@ -389,7 +474,7 @@ function App() {
                     {!runs.length && (
                       <tr>
                         <td colSpan={6} className="empty-state">
-                          No runs yet. Log a run to start the experiment history.
+                          No runs yet. Click "Log demo run" to add the first one.
                         </td>
                       </tr>
                     )}
@@ -398,12 +483,12 @@ function App() {
               </div>
 
               <div className="panel-footer">
-                <span>Showing {Math.min(runs.length, 5)} of {runs.length} runs</span>
+                <span>Showing {showAllRuns ? runs.length : Math.min(runs.length, 5)} of {runs.length} runs</span>
                 <span><i className="legend-dot" /> Results are demo records until connected to training</span>
               </div>
             </article>
 
-            <article className="panel lineage-panel">
+            <article className="panel lineage-panel" id="model-lineage" style={{ scrollMarginTop: 24 }}>
               <div className="panel-heading">
                 <div>
                   <h3>Model lineage</h3>
@@ -540,6 +625,8 @@ function App() {
         </div>
       </main>
 
+      {infoPanel && <InfoModal info={INFO[infoPanel]} onClose={() => setInfoPanel(null)} />}
+
       {showCreate && (
         <CreateExperimentModal
           busy={busy}
@@ -628,6 +715,27 @@ function CreateExperimentModal({
           </button>
         </div>
       </form>
+    </div>
+  );
+}
+
+function InfoModal({ info, onClose }: { info: { title: string; body: string[] }; onClose: () => void }) {
+  return (
+    <div className="modal-backdrop" onMouseDown={(event) => event.target === event.currentTarget && onClose()}>
+      <div className="modal" role="dialog" aria-label={info.title}>
+        <div className="modal-head">
+          <h2>{info.title}</h2>
+          <button type="button" className="icon-button" onClick={onClose} aria-label="Close">
+            <X size={18} />
+          </button>
+        </div>
+        {info.body.map((line) => (
+          <p className="info-line" key={line}>{line}</p>
+        ))}
+        <div className="modal-actions">
+          <button className="button primary" onClick={onClose}>Got it</button>
+        </div>
+      </div>
     </div>
   );
 }
